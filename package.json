@@ -13,6 +13,7 @@
     "build:simple": "npx vite build --mode production",
     "build:node": "node node_modules/vite/bin/vite.js build",
     "build:direct": "node ./node_modules/.bin/vite build",
+    "build:basic": "vite build",
     "type-check": "npx tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
