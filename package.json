@@ -3,11 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npx tsc --noEmit && vite build",
-    "build:vercel": "vite build",
-    "build:simple": "vite build --mode production",
+    "build:vercel": "npx vite build",
+    "build:simple": "npx vite build --mode production",
+    "build:node": "node node_modules/vite/bin/vite.js build",
+    "build:direct": "node ./node_modules/.bin/vite build",
     "type-check": "npx tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
