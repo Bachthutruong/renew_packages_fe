@@ -632,7 +632,7 @@ const HomePage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  選擇 B3
+                  最划算的資費
                   {selectedB3 && <span className="text-green-600">✓ {selectedB3}</span>}
                 </CardTitle>
                 {/* <CardDescription>
@@ -653,7 +653,7 @@ const HomePage: React.FC = () => {
       {/* B3 詳細資料對話框 */}
       <Dialog open={showB3Details} onOpenChange={setShowB3Details}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+          {/* <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5" />
               {b3DetailsSource === 'B3' 
@@ -667,34 +667,100 @@ const HomePage: React.FC = () => {
                 : `所選 B1 和 B2 組合的所有 B3 詳細資料清單及百分比`
               }
             </DialogDescription>
-          </DialogHeader>
+          </DialogHeader> */}
           <div className="space-y-3">
             {/* 如果是 B3 source，顯示當前選中的 B3 項目 */}
             {b3DetailsSource === 'B3' && selectedB3 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {b3Data.filter(item => item.value === selectedB3).map((item) => (
-                  <Card key={item.value} className="border-2 border-primary bg-primary/5">
+              <div className="space-y-4">
+                {/* 顯示 B1, B2, B3 選擇路徑 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* B1 Card */}
+                  <Card className="border-2 border-blue-200 bg-blue-50">
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-medium text-lg">{item.value}</h4>
-                        <span className="text-lg font-bold text-primary">{item.percentage}%</span>
+                        <h4 className="font-medium text-lg text-blue-800">選您目前的資費</h4>
+                        {/* <span className="text-lg font-bold text-blue-600">
+                          {b1Values.length > 0 ? Math.round((1 / b1Values.length) * 100 * 100) / 100 : 0}%
+                        </span> */}
                       </div>
                       
-                      {item.count && item.totalCount && (
-                        <div className="text-sm text-muted-foreground mb-3">
-                          {item.count} / {item.totalCount} 次出現
-                        </div>
-                      )}
+                      {/* <div className="text-sm text-muted-foreground mb-3">
+                        已選擇
+                      </div> */}
                       
-                      <div className="w-full bg-muted rounded-full h-3 mb-3">
+                      {/* <div className="w-full bg-blue-200 rounded-full h-3 mb-3">
                         <div 
-                          className="bg-primary h-3 rounded-full transition-all"
-                          style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                          className="bg-blue-600 h-3 rounded-full transition-all"
+                          style={{ 
+                            width: `${b1Values.length > 0 ? Math.min((1 / b1Values.length) * 100, 100) : 0}%` 
+                          }}
                         />
+                      </div> */}
+                      
+                      <div className="text-center font-medium text-blue-800">
+                        {selectedB1}
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+
+                  {/* B2 Card */}
+                  {b2Data.filter(item => item.value === selectedB2).map((item) => (
+                    <Card key={item.value} className="border-2 border-green-200 bg-green-50">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-medium text-lg text-green-800">續約選手機案比較划算，您要手機案嗎？</h4>
+                          <span className="text-lg font-bold text-green-600">{item.percentage}%</span>
+                        </div>
+                        
+                        {item.count && item.totalCount && (
+                          <div className="text-sm text-muted-foreground mb-3">
+                            {item.count} / {item.totalCount} 次出現
+                          </div>
+                        )}
+                        
+                        <div className="w-full bg-green-200 rounded-full h-3 mb-3">
+                          <div 
+                            className="bg-green-600 h-3 rounded-full transition-all"
+                            style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                          />
+                        </div>
+                        
+                        <div className="text-center font-medium text-green-800">
+                          {item.value}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {/* B3 Card */}
+                  {b3Data.filter(item => item.value === selectedB3).map((item) => (
+                    <Card key={item.value} className="border-2 border-primary bg-primary/5">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-medium text-lg">最划算的資費                          </h4>
+                          <span className="text-lg font-bold text-primary">{item.percentage}%</span>
+                        </div>
+                        
+                        {item.count && item.totalCount && (
+                          <div className="text-sm text-muted-foreground mb-3">
+                            {item.count} / {item.totalCount} 次出現
+                          </div>
+                        )}
+                        
+                        <div className="w-full bg-muted rounded-full h-3 mb-3">
+                          <div 
+                            className="bg-primary h-3 rounded-full transition-all"
+                            style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                          />
+                        </div>
+                        
+                        <div className="text-center font-medium text-primary">
+                          {item.value}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -712,7 +778,7 @@ const HomePage: React.FC = () => {
             {!isLoadingB3Details && b3Details.length > 0 && (
               <div className="mt-6 pt-6 border-t">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">詳細描述統計</h3>
+                  {/* <h3 className="text-lg font-semibold">詳細描述統計</h3> */}
                   <div className="text-sm text-muted-foreground">
                     共 {b3Details.length} 項資料
                   </div>
@@ -740,7 +806,7 @@ const HomePage: React.FC = () => {
                             </div>
                             
                             {/* 統計資訊 */}
-                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                            {/* <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
@@ -751,7 +817,7 @@ const HomePage: React.FC = () => {
                               <div className="text-sm font-semibold text-primary">
                                 {safeItem.percentage.toFixed(1)}%
                               </div>
-                            </div>
+                            </div> */}
                             
                             {/* 設定比例顯示 */}
                             {safeItem.configuredPercentage !== undefined && (

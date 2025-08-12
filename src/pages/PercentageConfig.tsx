@@ -1212,7 +1212,7 @@ const PercentageConfig: React.FC = () => {
                     }}
                     className="gap-2"
                   >
-                    重新選擇 B3
+                    重新最划算的資費
                   </Button>
                   <Button 
                     variant="outline" 
@@ -1373,7 +1373,7 @@ const PercentageConfig: React.FC = () => {
         <Card className="border-blue-200 bg-blue-50">
           <CardHeader>
             <CardTitle className="text-blue-800 flex items-center gap-2">
-              🎯 選擇 B3 以編輯詳細資料
+              🎯 最划算的資費 以編輯詳細資料
             </CardTitle>
             <CardDescription>
               請選擇一個 B3 項目來查看和編輯其詳細資料的百分比 - B1：{selectedB1}，B2：{selectedB2}
