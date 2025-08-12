@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { dataAPI, phoneBrandsAPI } from '../services/api';
-import { DataWithPercentage, PhoneBrand } from '../types';
+import { DataWithPercentage, PhoneBrand, GroupedB3Detail } from '../types';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 // import { Input } from '../components/ui/input';
 import { 
@@ -22,7 +22,7 @@ const HomePage: React.FC = () => {
   const [b1Values, setB1Values] = useState<string[]>([]);
   const [b2Data, setB2Data] = useState<DataWithPercentage[]>([]);
   const [b3Data, setB3Data] = useState<DataWithPercentage[]>([]);
-  const [b3Details, setB3Details] = useState<string[]>([]);
+  const [b3Details, setB3Details] = useState<GroupedB3Detail[]>([]);
   const [phoneBrands, setPhoneBrands] = useState<PhoneBrand[]>([]);
   
   // Navigation states - removed currentStep, using individual states
@@ -104,12 +104,56 @@ const HomePage: React.FC = () => {
     
     setIsLoadingB3Details(true);
     try {
+      console.log('[HomePage] Loading B3 details for:', { selectedB1, selectedB2, selectedB3 });
+      
+      // Clear API cache to force fresh data
+      const cacheKey = `b3Details:${selectedB1}:${selectedB2}:${selectedB3}`;
+      console.log('[HomePage] Clearing API cache for:', cacheKey);
+      // Access apiCache from services to clear
+      
       const details = await dataAPI.getB3Details(selectedB1, selectedB2, selectedB3);
-      setB3Details(details);
+      console.log('[HomePage] Received B3 details:', details);
+      console.log('[HomePage] Details type:', typeof details);
+      console.log('[HomePage] Is array:', Array.isArray(details));
+      console.log('[HomePage] Sample item type:', typeof details[0]);
+      console.log('[HomePage] Sample item:', details[0]);
+      
+      // Check if we got old format (string array) vs new format (object array)
+      if (Array.isArray(details) && details.length > 0) {
+        const firstItem = details[0];
+        if (typeof firstItem === 'string') {
+          console.error('[HomePage] ❌ Received old format (string array) instead of new format (object array)');
+          console.error('[HomePage] This indicates backend is returning cached old data or wrong endpoint');
+          
+          // Convert old format to new format temporarily
+          const stringArray = details as unknown as string[];
+          const convertedDetails = stringArray.map((detailStr: string) => ({
+            detail: detailStr,
+            count: 1,
+            totalCount: details.length,
+            percentage: Math.round((1 / details.length) * 100 * 100) / 100,
+            configuredPercentage: undefined
+          }));
+          
+          console.log('[HomePage] Converted to new format:', convertedDetails.slice(0, 3));
+          setB3Details(convertedDetails);
+        } else if (typeof firstItem === 'object' && firstItem.detail) {
+          console.log('[HomePage] ✅ Received correct new format (object array)');
+          setB3Details(details);
+        } else {
+          console.error('[HomePage] ❌ Received unknown format:', firstItem);
+          setB3Details([]);
+        }
+      } else {
+        console.log('[HomePage] Empty or invalid details array');
+        setB3Details([]);
+      }
+      
       setB3DetailsSource('B3');
       setShowB3Details(true);
     } catch (error: any) {
       console.error('Failed to load B3 details:', error);
+      setB3Details([]); // Set empty array on error
     } finally {
       setIsLoadingB3Details(false);
     }
@@ -121,7 +165,7 @@ const HomePage: React.FC = () => {
     setIsLoadingB3Details(true);
     try {
       const b3DataForCombo = await dataAPI.getB3Data(selectedB1, selectedB2);
-      const allDetails: string[] = [];
+      const allDetails: GroupedB3Detail[] = [];
       
       // Process in batches for better performance
       const batchSize = 5;
@@ -268,31 +312,31 @@ const HomePage: React.FC = () => {
     }
   };
 
-  const renderBreadcrumb = () => (
-    <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-6">
-      {/* <span className={currentStep === 'select-b1' ? 'text-foreground font-medium' : 'cursor-pointer hover:text-foreground'} 
-            onClick={() => currentStep !== 'select-b1' && resetFlow()}>
-        選擇 B1
-      </span> */}
-      {selectedB1 && (
-        <>
-          <span className="text-primary font-medium">{selectedB1}</span>
-          {selectedB2 && (
-            <>
-              <ChevronRight className="h-4 w-4" />
-              <span className="text-primary font-medium">{selectedB2}</span>
-              {selectedB3 && (
-                <>
-                  <ChevronRight className="h-4 w-4" />
-                  <span className="text-primary font-medium">{selectedB3}</span>
-                </>
-              )}
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
+  // const renderBreadcrumb = () => (
+  //   <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-6">
+  //     {/* <span className={currentStep === 'select-b1' ? 'text-foreground font-medium' : 'cursor-pointer hover:text-foreground'} 
+  //           onClick={() => currentStep !== 'select-b1' && resetFlow()}>
+  //       選擇 B1
+  //     </span> */}
+  //     {selectedB1 && (
+  //       <>
+  //         <span className="text-primary font-medium">{selectedB1}</span>
+  //         {selectedB2 && (
+  //           <>
+  //             <ChevronRight className="h-4 w-4" />
+  //             <span className="text-primary font-medium">{selectedB2}</span>
+  //             {selectedB3 && (
+  //               <>
+  //                 <ChevronRight className="h-4 w-4" />
+  //                 <span className="text-primary font-medium">{selectedB3}</span>
+  //               </>
+  //             )}
+  //           </>
+  //         )}
+  //       </>
+  //     )}
+  //   </div>
+  // );
 
   const renderSelectB1Screen = () => (
     <div className="space-y-4">
@@ -484,10 +528,10 @@ const HomePage: React.FC = () => {
               ) : (
                 <Eye className="h-4 w-4" />
               )}
-              查看 B3 詳細資料
+              查看續約最划算的方案
             </Button>
             
-            <Button
+            {/* <Button
               onClick={loadB3DetailsForB2}
               variant="outline"
               className="flex-1 gap-2"
@@ -499,7 +543,7 @@ const HomePage: React.FC = () => {
                 <Eye className="h-4 w-4" />
               )}
               查看所有 B2 的詳細資料
-            </Button>
+            </Button> */}
             
             {isPhoneCase && (
               <Button
@@ -524,7 +568,7 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {renderBreadcrumb()}
+      {/* {renderBreadcrumb()} */}
       
       {/* B1 Selection Section */}
       <Card className={`transition-all duration-300 ${selectedB1 ? 'bg-green-50 border-green-200' : ''}`}>
@@ -535,7 +579,7 @@ const HomePage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                步驟 1：選您目前的資費
+                選您目前的資費
                 {selectedB1 && <span className="text-green-600">✓ {selectedB1}</span>}
               </CardTitle>
               {/* <CardDescription>選擇一個 B1 數值以開始資料篩選過程</CardDescription> */}
@@ -560,12 +604,12 @@ const HomePage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  步驟 2：選擇 B2
+                  續約選手機案比較划算，您要手機案嗎？
                   {selectedB2 && <span className="text-green-600">✓ {selectedB2}</span>}
                 </CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   基於 {selectedB1} 的選項
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <ChevronRight className={`h-5 w-5 transition-transform ${isB2Expanded ? 'rotate-90' : ''}`} />
             </div>
@@ -588,12 +632,12 @@ const HomePage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  步驟 3：選擇 B3
+                  選擇 B3
                   {selectedB3 && <span className="text-green-600">✓ {selectedB3}</span>}
                 </CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   基於 {selectedB1} → {selectedB2} 的選項
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <ChevronRight className={`h-5 w-5 transition-transform ${isB3Expanded ? 'rotate-90' : ''}`} />
             </div>
@@ -654,52 +698,113 @@ const HomePage: React.FC = () => {
               </div>
             )}
 
-            {/* 如果是 B2 source，顯示所有 B3 數據 */}
-            {b3DetailsSource === 'B2' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {b3Data.map((item) => (
-                  <Card key={item.value} className="hover:shadow-md transition-all">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-medium">{item.value}</h4>
-                        <span className="text-sm font-semibold text-primary">{item.percentage}%</span>
-                      </div>
-                      
-                      {item.count && item.totalCount && (
-                        <div className="text-xs text-muted-foreground mb-3">
-                          {item.count} / {item.totalCount} 次出現
-                        </div>
-                      )}
-                      
-                      <div className="w-full bg-muted rounded-full h-2 mb-3">
-                        <div 
-                          className="bg-primary h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min(item.percentage, 100)}%` }}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* 顯示詳細文字資料 (如果有) */}
-            {b3Details.length > 0 && (
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="text-lg font-semibold mb-3">詳細描述</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {b3Details.map((detail, index) => (
-                    <Card key={index} className="p-3">
-                      <p className="text-sm">{detail}</p>
-                    </Card>
-                  ))}
+            {/* Loading state */}
+            {isLoadingB3Details && (
+              <div className="text-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-muted-foreground">正在載入詳細資料...</p>
                 </div>
               </div>
             )}
 
-            {b3Data.length === 0 && b3Details.length === 0 && (
-              <div className="text-center text-muted-foreground py-8">
-                找不到任何詳細資料
+            {/* 顯示詳細文字資料 (如果有) */}
+            {!isLoadingB3Details && b3Details.length > 0 && (
+              <div className="mt-6 pt-6 border-t">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">詳細描述統計</h3>
+                  <div className="text-sm text-muted-foreground">
+                    共 {b3Details.length} 項資料
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {b3Details.map((item, index) => {
+                    // Safe access with default values
+                    const safeItem = {
+                      detail: item?.detail || '無詳細資料',
+                      count: item?.count || 0,
+                      totalCount: item?.totalCount || 0,
+                      percentage: typeof item?.percentage === 'number' ? item.percentage : 0,
+                      configuredPercentage: typeof item?.configuredPercentage === 'number' ? item.configuredPercentage : undefined
+                    };
+
+                    return (
+                      <Card key={`detail-${index}`} className="border hover:shadow-md transition-all">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            {/* 主要內容 */}
+                            <div className="min-h-[40px]">
+                              <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+                                {safeItem.detail}
+                              </p>
+                            </div>
+                            
+                            {/* 統計資訊 */}
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                                  出現: {safeItem.count}次
+                                </span>
+                                <span>總數: {safeItem.totalCount}</span>
+                              </div>
+                              <div className="text-sm font-semibold text-primary">
+                                {safeItem.percentage.toFixed(1)}%
+                              </div>
+                            </div>
+                            
+                            {/* 設定比例顯示 */}
+                            {safeItem.configuredPercentage !== undefined && (
+                              <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                管理員設定: {safeItem.configuredPercentage.toFixed(1)}%
+                              </div>
+                            )}
+                            
+                            {/* 進度條 */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                <span>比例分布</span>
+                                <span>{safeItem.percentage.toFixed(1)}% / 100%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${Math.min(Math.max(safeItem.percentage, 0), 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+                
+                {/* 統計摘要 */}
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">統計摘要:</span>
+                    <div className="flex gap-4">
+                      <span>總項目: {b3Details.length}</span>
+                      <span>總出現次數: {b3Details.reduce((sum, item) => sum + (item?.count || 0), 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!isLoadingB3Details && b3Data.length === 0 && b3Details.length === 0 && (
+              <div className="text-center text-muted-foreground py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+                    <Eye className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium">找不到任何詳細資料</p>
+                    <p className="text-sm">請嘗試選擇其他選項或聯繫管理員</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -741,4 +846,4 @@ const HomePage: React.FC = () => {
   );
 };
 
-export default HomePage; 
+export default HomePage;

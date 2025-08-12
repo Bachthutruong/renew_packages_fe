@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { dataAPI } from '../services/api';
-import { DataWithPercentage } from '../types';
+import { apiCache } from '../services/api';
+import { DataWithPercentage, GroupedB3Detail } from '../types';
 import { useDataSelection } from '../context/DataSelectionContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -10,7 +11,8 @@ import {
   Home,
   ArrowLeft,
   Settings,
-  ChevronDown
+  ChevronDown,
+  Eye
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -19,12 +21,14 @@ const PercentageConfig: React.FC = () => {
   const {
     selectedB1,
     selectedB2,
+    selectedB3,
     b2Data,
     b3Data,
     setB2Data,
     setB3Data,
     resetFlow,
-    setSelectedB2
+    setSelectedB2,
+    setSelectedB3
   } = useDataSelection();
   
   // Original server data for comparison
@@ -35,6 +39,12 @@ const PercentageConfig: React.FC = () => {
   const [localB2Data, setLocalB2Data] = useState<DataWithPercentage[]>([]);
   const [localB3Data, setLocalB3Data] = useState<DataWithPercentage[]>([]);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
+  
+  // B3 Detail states
+  const [b3Details, setB3Details] = useState<GroupedB3Detail[]>([]);
+  const [localB3Details, setLocalB3Details] = useState<GroupedB3Detail[]>([]);
+  const [hasB3DetailChanges, setHasB3DetailChanges] = useState(false);
+  const [isLoadingB3Details, setIsLoadingB3Details] = useState(false);
   
   // UI states
   const [isLoading, setIsLoading] = useState(false);
@@ -136,60 +146,155 @@ const PercentageConfig: React.FC = () => {
     }
   };
 
+  // Load B3 details for a specific B3 value
+  const loadB3Details = async (b3Value: string) => {
+    if (!selectedB1 || !selectedB2 || !b3Value) return;
+    
+    setIsLoadingB3Details(true);
+    try {
+      console.log('[PercentageConfig] Loading B3 details for:', { selectedB1, selectedB2, b3Value });
+      const details = await dataAPI.getB3Details(selectedB1, selectedB2, b3Value);
+      console.log('[PercentageConfig] Received B3 details:', details);
+      
+      // Validate and set details
+      if (Array.isArray(details) && details.length > 0) {
+        const validatedDetails = details.filter(item => 
+          item && typeof item === 'object' && 
+          item.detail && typeof item.detail === 'string' &&
+          typeof item.count === 'number' &&
+          typeof item.totalCount === 'number' &&
+          typeof item.percentage === 'number'
+        );
+        
+        console.log('[PercentageConfig] Validated details count:', validatedDetails.length);
+        setB3Details(validatedDetails);
+        
+        // Initialize local state with server data
+        setLocalB3Details(validatedDetails.map(item => ({
+          ...item,
+          configuredPercentage: item.configuredPercentage || item.percentage
+        })));
+        setHasB3DetailChanges(false);
+      } else {
+        console.log('[PercentageConfig] No valid details found');
+        setB3Details([]);
+        setLocalB3Details([]);
+        setHasB3DetailChanges(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to load B3 details:', error);
+      toast.error('載入 B3 詳細資料失敗');
+      setB3Details([]);
+      setLocalB3Details([]);
+      setHasB3DetailChanges(false);
+    } finally {
+      setIsLoadingB3Details(false);
+    }
+  };
+
   // Enhanced free input logic - no auto-balance
   const updateLocalPercentage = (type: 'B2' | 'B3', value: string, newPercentage: number) => {
-    console.log(`updateLocalPercentage called:`, { type, value, newPercentage });
-    
-    // Validate input
-    if (newPercentage < 0) {
-      console.warn('Invalid percentage value (negative):', newPercentage);
-      return;
-    }
+    console.log(`[updateLocalPercentage] Updating ${type} percentage:`, { value, newPercentage });
     
     if (type === 'B2') {
-      const currentData = localB2Data.length > 0 ? localB2Data : b2Data;
-      updateSinglePercentage(currentData, value, newPercentage, setLocalB2Data, 'B2');
-    } else {
-      const currentData = localB3Data.length > 0 ? localB3Data : b3Data;
-      updateSinglePercentage(currentData, value, newPercentage, setLocalB3Data, 'B3');
+      setLocalB2Data(prev => prev.map(item => 
+        item.value === value 
+          ? { ...item, percentage: newPercentage }
+          : item
+      ));
+    } else if (type === 'B3') {
+      setLocalB3Data(prev => prev.map(item => 
+        item.value === value 
+          ? { ...item, percentage: newPercentage }
+          : item
+      ));
     }
     
     setHasLocalChanges(true);
   };
 
-  // Simple update function without auto-balance
-  const updateSinglePercentage = (
-    currentData: DataWithPercentage[], 
-    targetValue: string, 
-    newPercentage: number, 
-    setData: (data: DataWithPercentage[]) => void,
-    dataType: string
-  ) => {
-    console.log(`[${dataType}] Updating ${targetValue}: ${newPercentage}%`);
+  // Update B3 detail percentage locally
+  const updateLocalB3DetailPercentage = (detail: string, percentage: number) => {
+    console.log('[updateLocalB3DetailPercentage] Updating:', { detail, percentage });
     
-    const updatedData = [...currentData];
-    const targetIndex = updatedData.findIndex(item => item.value === targetValue);
-    
-    if (targetIndex === -1) {
-      console.error(`Target item "${targetValue}" not found!`);
-      return;
-    }
+    setLocalB3Details(prev => prev.map(item => 
+      item.detail === detail 
+        ? { ...item, configuredPercentage: percentage }
+        : item
+    ));
+    setHasB3DetailChanges(true);
+  };
 
-    // Simply update the target item without affecting others
-    updatedData[targetIndex].percentage = newPercentage;
+  // Save B3 detail changes
+  const saveB3DetailChanges = async () => {
+    if (!hasB3DetailChanges || !selectedB1 || !selectedB2 || !selectedB3) return;
     
-    // Update input value to reflect the change
-    const inputKey = `${dataType.toLowerCase()}-${targetValue}`;
-    setInputValues(prev => ({
-      ...prev,
-      [inputKey]: newPercentage.toString()
-    }));
+    console.log('[saveB3DetailChanges] Starting save process...');
+    console.log('[saveB3DetailChanges] localB3Details:', localB3Details);
     
-    // Log the current total
-    const total = updatedData.reduce((sum, item) => sum + item.percentage, 0);
-    console.log(`[${dataType}] Updated ${targetValue} to ${newPercentage}%. Current total: ${total}%`);
-    
-    setData(updatedData);
+    try {
+      setIsLoading(true);
+      
+      // Clear frontend cache first
+      apiCache.clearByPrefix('b3Details');
+      
+      // Save all changed details
+      for (const item of localB3Details) {
+        if (item.configuredPercentage !== undefined) {
+          try {
+            console.log(`🔄 Saving B3 detail ${item.detail}: ${item.configuredPercentage}%`);
+            await dataAPI.updateB3DetailPercentage(selectedB1, selectedB2, selectedB3, item.detail, item.configuredPercentage);
+            console.log(`✅ B3 detail ${item.detail} saved`);
+          } catch (error: any) {
+            console.error(`❌ Failed to save B3 detail ${item.detail}:`, error);
+            throw new Error(`Failed to save B3 detail ${item.detail}: ${error.message || error}`);
+          }
+        }
+      }
+      
+      // Wait a bit for backend to process
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Reload from server to get updated data
+      console.log('[saveB3DetailChanges] Reloading B3 details from server...');
+      await loadB3Details(selectedB3);
+      
+      setHasB3DetailChanges(false);
+      console.log('🎉 B3 detail save completed successfully!');
+      toast.success('B3 詳細資料儲存成功！');
+      
+    } catch (error: any) {
+      console.error('❌ B3 detail save failed:', error);
+      
+      let errorMessage = '儲存 B3 詳細資料失敗！';
+      if (error.message) {
+        errorMessage += `\n\n詳細錯誤：${error.message}`;
+      }
+      
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reset B3 detail changes
+  const resetB3DetailChanges = () => {
+    console.log('Resetting B3 detail changes to server data...');
+    setLocalB3Details(b3Details.map(item => ({
+      ...item,
+      configuredPercentage: item.configuredPercentage || item.percentage
+    })));
+    setHasB3DetailChanges(false);
+  };
+
+  // Reset B3 details to natural percentages
+  const resetB3DetailsToNatural = () => {
+    console.log('Resetting B3 details to natural percentages...');
+    setLocalB3Details(b3Details.map(item => ({
+      ...item,
+      configuredPercentage: undefined
+    })));
+    setHasB3DetailChanges(true);
   };
 
   const saveLocalChanges = async () => {
@@ -404,6 +509,26 @@ const PercentageConfig: React.FC = () => {
     }
   };
 
+  // Force reload B3 details from server
+  const forceReloadB3Details = async () => {
+    if (!selectedB1 || !selectedB2 || !selectedB3) return;
+    
+    console.log('[forceReloadB3Details] Force reloading B3 details...');
+    
+    try {
+      // Clear all cache
+      apiCache.clearByPrefix('b3Details');
+      
+      // Reload from server
+      await loadB3Details(selectedB3);
+      
+      toast.success('B3 詳細資料已重新載入！');
+    } catch (error: any) {
+      console.error('[forceReloadB3Details] Failed to reload:', error);
+      toast.error('重新載入失敗');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -482,7 +607,7 @@ const PercentageConfig: React.FC = () => {
               )}
               
               {selectedB1 && !selectedB2 && (
-                <div className="text-sm text-muted-foreground">請在儀表板選擇 B2 以編輯 B3 百分比</div>
+                <div className="text-sm text-muted-foreground">請在儀表板續約選手機案比較划算，您要手機案嗎？ 以編輯 B3 百分比</div>
               )}
             </div>
 
@@ -694,7 +819,7 @@ const PercentageConfig: React.FC = () => {
                     )}
                     {selectedB2 && (
                       <div className="text-sm text-green-600 bg-green-50 p-2 rounded flex items-center justify-between">
-                        <span>✅ 已選擇 B2：<strong>{selectedB2}</strong> - 您現在可以在下方編輯對應的 B3 百分比</span>
+                        <span>✅ 已續約選手機案比較划算，您要手機案嗎？：<strong>{selectedB2}</strong> - 您現在可以在下方編輯對應的 B3 百分比</span>
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -708,7 +833,7 @@ const PercentageConfig: React.FC = () => {
                           }}
                           className="text-xs h-6"
                         >
-                          重新選擇 B2
+                          重新續約選手機案比較划算，您要手機案嗎？
                         </Button>
                       </div>
                     )}
@@ -1043,6 +1168,267 @@ const PercentageConfig: React.FC = () => {
               </div>
             </CardContent>
           )}
+        </Card>
+      )}
+
+      {/* B3 Detail Management */}
+      {selectedB1 && selectedB2 && selectedB3 && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader>
+            <CardTitle className="text-purple-800 flex items-center gap-2">
+              📋 B3 詳細資料管理
+            </CardTitle>
+            <CardDescription>
+              管理 B3 詳細資料的百分比設定 - B1：{selectedB1}，B2：{selectedB2}，B3：{selectedB3}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-muted-foreground">
+                  💡 點擊按鈕查看和編輯 B3 詳細資料
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => selectedB3 && loadB3Details(selectedB3)}
+                    disabled={isLoadingB3Details}
+                    className="gap-2"
+                  >
+                    {isLoadingB3Details ? (
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                    載入詳細資料
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setSelectedB3('');
+                      setB3Details([]);
+                      setLocalB3Details([]);
+                      setHasB3DetailChanges(false);
+                    }}
+                    className="gap-2"
+                  >
+                    重新選擇 B3
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={forceReloadB3Details}
+                    disabled={isLoadingB3Details}
+                    className="gap-2"
+                    title="強制重新載入詳細資料"
+                  >
+                    🔄 強制重新載入
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={resetB3DetailsToNatural}
+                    disabled={localB3Details.length === 0}
+                    className="gap-2"
+                    title="重設為自然百分比"
+                  >
+                    🔄 重設為自然值
+                  </Button>
+                </div>
+              </div>
+
+              {/* B3 Details Display */}
+              {!isLoadingB3Details && localB3Details.length > 0 && (
+                <div className="space-y-4">
+                  {/* Save/Cancel Panel for B3 Details */}
+                  {hasB3DetailChanges && (
+                    <Card className="border-amber-200 bg-amber-50">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                            <span className="text-sm font-medium">有未儲存的 B3 詳細資料變更</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={resetB3DetailChanges}
+                              disabled={isLoading}
+                            >
+                              取消
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={saveB3DetailChanges}
+                              disabled={isLoading}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {isLoading ? '正在儲存...' : '儲存 B3 詳細資料'}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Total Percentage Display */}
+                  <div className="bg-gray-50 p-3 rounded border">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">總百分比:</span>
+                      {(() => {
+                        const total = localB3Details.reduce((sum, item) => {
+                          const configuredPercentage = item?.configuredPercentage;
+                          return sum + (configuredPercentage !== undefined ? configuredPercentage : item?.percentage || 0);
+                        }, 0);
+                        const isExact100 = Math.abs(total - 100) < 0.01; // Allow small floating point errors
+                        return (
+                          <span className={`text-sm font-bold px-2 py-1 rounded ${
+                            isExact100 
+                              ? 'text-green-700 bg-green-100' 
+                              : total > 100 
+                                ? 'text-red-700 bg-red-100'
+                                : 'text-orange-700 bg-orange-100'
+                          }`}>
+                            {total.toFixed(1)}%
+                            {isExact100 ? ' ✅' : total > 100 ? ' ⚠️ 超過100%' : ' ⚠️ 未達100%'}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💡 可以自由調整各詳細資料的百分比，不強制要求總和為100%
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {localB3Details.map((item, index) => {
+                      const safeItem = {
+                        detail: item?.detail || '無詳細資料',
+                        count: item?.count || 0,
+                        totalCount: item?.totalCount || 0,
+                        percentage: typeof item?.percentage === 'number' ? item.percentage : 0,
+                        configuredPercentage: typeof item?.configuredPercentage === 'number' ? item.configuredPercentage : undefined
+                      };
+
+                      const hasChanged = safeItem.configuredPercentage !== undefined && 
+                                       Math.abs(safeItem.configuredPercentage - safeItem.percentage) > 0.01;
+
+                      return (
+                        <Card key={`detail-${index}`} className={`border ${hasChanged ? 'border-amber-300 bg-amber-50' : ''}`}>
+                          <CardContent className="p-4">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{safeItem.detail}</p>
+                                {hasChanged && <div className="w-2 h-2 bg-amber-500 rounded-full"></div>}
+                              </div>
+                              <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                <span>出現: {safeItem.count}次 / 總數: {safeItem.totalCount}</span>
+                                <span>自然比例: {safeItem.percentage.toFixed(1)}%</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={safeItem.configuredPercentage !== undefined ? safeItem.configuredPercentage : safeItem.percentage}
+                                  onChange={(e) => {
+                                    const newValue = parseFloat(e.target.value) || 0;
+                                    updateLocalB3DetailPercentage(safeItem.detail, newValue);
+                                  }}
+                                  className="flex-1 px-2 py-1 text-sm border rounded"
+                                />
+                                <span className="text-xs">%</span>
+                                {safeItem.configuredPercentage !== undefined && (
+                                  <span className="text-xs text-green-600 bg-green-100 px-1 rounded">
+                                    已設定
+                                  </span>
+                                )}
+                              </div>
+                              {hasChanged && (
+                                <div className="text-xs text-amber-600">
+                                  已修改: {safeItem.percentage.toFixed(1)}% → {safeItem.configuredPercentage?.toFixed(1)}%
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {!isLoadingB3Details && localB3Details.length === 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                  <p>尚未載入詳細資料</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* B3 Selection for Detail Management */}
+      {selectedB1 && selectedB2 && !selectedB3 && (localB3Data.length > 0 || b3Data.length > 0) && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="text-blue-800 flex items-center gap-2">
+              🎯 選擇 B3 以編輯詳細資料
+            </CardTitle>
+            <CardDescription>
+              請選擇一個 B3 項目來查看和編輯其詳細資料的百分比 - B1：{selectedB1}，B2：{selectedB2}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                💡 點擊下方任一 B3 項目來選擇並編輯其詳細資料
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {(localB3Data.length > 0 ? localB3Data : b3Data).map((item) => (
+                  <Card 
+                    key={item.value} 
+                    className="border cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all"
+                    onClick={() => {
+                      console.log(`[PercentageConfig] Selecting B3 for detail management: ${item.value}`);
+                      // Set selectedB3 in context
+                      if (window.location.pathname.includes('/admin/percentage-config')) {
+                        // Update URL to include B3 selection
+                        window.history.pushState(null, '', `/admin/percentage-config?b3=${item.value}`);
+                      }
+                      // You might need to add selectedB3 to your context or use a different approach
+                      // For now, we'll use a simple state update
+                      setSelectedB3(item.value);
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-lg">{item.value}</h4>
+                          <span className="text-sm font-semibold text-blue-600">{item.percentage}%</span>
+                        </div>
+                        {item.count && item.totalCount && (
+                          <p className="text-xs text-muted-foreground">
+                            {item.count}/{item.totalCount} 次出現
+                          </p>
+                        )}
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all"
+                            style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-blue-600 text-center">
+                          點擊選擇此 B3
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </CardContent>
         </Card>
       )}
 

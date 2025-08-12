@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { AuthResponse, DataWithPercentage, PhoneBrand, ImportResponse } from '../types';
+import { AuthResponse, DataWithPercentage, PhoneBrand, ImportResponse, GroupedB3Detail } from '../types';
 
 const API_BASE_URL = 'https://renew-packages-be.onrender.com/api';
-// const API_BASE_URL = '/api';
+// const API_BASE_URL = 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -53,9 +53,18 @@ class APICache {
   clear(): void {
     this.cache.clear();
   }
+
+  // New method to force clear specific key
+  clearKey(key: string): void {
+    this.cache.delete(key);
+    console.log(`[APICache] Cleared cache for key: ${key}`);
+  }
 }
 
 const apiCache = new APICache();
+
+// Export apiCache for external use
+export { apiCache };
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
@@ -207,17 +216,68 @@ export const dataAPI = {
     return data;
   },
 
-  getB3Details: async (b1: string, b2: string, b3: string): Promise<string[]> => {
+  getB3Details: async (b1: string, b2: string, b3: string): Promise<GroupedB3Detail[]> => {
     const cacheKey = `b3Details:${b1}:${b2}:${b3}`;
-    const cached = apiCache.get<string[]>(cacheKey);
+    
+    // Force clear cache for fresh data during debugging
+    apiCache.clearKey(cacheKey);
+    
+    const cached = apiCache.get<GroupedB3Detail[]>(cacheKey);
     if (cached) {
+      console.log(`[Frontend] Returning cached B3 details, count: ${cached.length}`);
       return cached;
     }
 
+    console.log(`[Frontend] Fetching fresh B3 details for: ${b1}, ${b2}, ${b3}`);
+    
+    // Try new grouped endpoint first
+    try {
+      console.log(`[Frontend] Trying new grouped endpoint...`);
+      const groupedResponse = await api.get('/data/b3/details/grouped', {
+        params: { b1, b2, b3 },
+      });
+      const groupedData = groupedResponse.data;
+      console.log(`[Frontend] Grouped endpoint response:`, groupedData);
+      console.log(`[Frontend] Grouped endpoint type:`, typeof groupedData, Array.isArray(groupedData));
+      console.log(`[Frontend] Grouped endpoint sample:`, groupedData[0]);
+      
+      if (Array.isArray(groupedData) && groupedData.length > 0 && typeof groupedData[0] === 'object' && groupedData[0].detail) {
+        console.log(`[Frontend] ✅ Grouped endpoint returned correct format!`);
+        apiCache.set(cacheKey, groupedData, 10 * 60 * 1000);
+        return groupedData;
+      }
+    } catch (error) {
+      console.log(`[Frontend] Grouped endpoint failed:`, error);
+    }
+    
+    // Try test endpoint second
+    try {
+      console.log(`[Frontend] Trying test endpoint...`);
+      const testResponse = await api.get('/data/test/b3/details', {
+        params: { b1, b2, b3 },
+      });
+      const testData = testResponse.data;
+      console.log(`[Frontend] Test endpoint response:`, testData);
+      console.log(`[Frontend] Test endpoint type:`, typeof testData, Array.isArray(testData));
+      console.log(`[Frontend] Test endpoint sample:`, testData[0]);
+      
+      if (Array.isArray(testData) && testData.length > 0 && typeof testData[0] === 'object') {
+        console.log(`[Frontend] ✅ Test endpoint returned correct format!`);
+        apiCache.set(cacheKey, testData, 10 * 60 * 1000);
+        return testData;
+      }
+    } catch (error) {
+      console.log(`[Frontend] Test endpoint failed, trying regular endpoint...`);
+    }
+    
+    // Fallback to regular endpoint
     const response = await api.get('/data/b3/details', {
       params: { b1, b2, b3 },
     });
     const data = response.data;
+    console.log(`[Frontend] Regular endpoint response type:`, typeof data, Array.isArray(data));
+    console.log(`[Frontend] Regular endpoint sample:`, data[0]);
+    
     apiCache.set(cacheKey, data, 10 * 60 * 1000); // 10 minutes for details
     return data;
   },
@@ -234,11 +294,18 @@ export const dataAPI = {
     apiCache.clearByPrefix(`b3Data:${b1}:${b2}`);
   },
 
+  updateB3DetailPercentage: async (b1: string, b2: string, b3: string, detail: string, percentage: number): Promise<void> => {
+    await api.put('/data/b3/detail/percentage', { b1, b2, b3, detail, percentage });
+    // Clear related cache
+    apiCache.clearByPrefix(`b3Details:${b1}:${b2}:${b3}`);
+  },
+
   clearAllConfigurations: async (): Promise<void> => {
     await api.delete('/data/configurations');
     // Clear percentage-related cache
     apiCache.clearByPrefix('b2Data');
     apiCache.clearByPrefix('b3Data');
+    apiCache.clearByPrefix('b3Details');
   },
 
   migratePercentageConfigs: async (): Promise<void> => {
@@ -282,4 +349,4 @@ export const phoneBrandsAPI = {
     // Clear phone brands cache
     apiCache.clearByPrefix('phoneBrands');
   },
-}; 
+};

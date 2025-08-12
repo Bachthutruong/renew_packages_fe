@@ -5,13 +5,13 @@ import { Button } from '../ui/button';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem } from '../ui/sidebar';
 import { 
   LogOut, 
-  BarChart3, 
   Home,
   Database,
   Smartphone,
   UserCog,
   Settings
 } from 'lucide-react';
+import logoImage from '../../assets/logo.png';
 
 const AdminLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -38,8 +38,8 @@ const AdminLayout: React.FC = () => {
       <Sidebar className="hidden lg:flex">
         <SidebarHeader>
           <div className="flex items-center space-x-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <BarChart3 className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-24 w-24 items-center justify-center rounded-lg overflow-hidden">
+              <img src={logoImage} alt="Logo" className="h-full w-full object-contain" />
             </div>
             <div>
               <h2 className="font-bold text-foreground">管理面板</h2>
@@ -76,8 +76,8 @@ const AdminLayout: React.FC = () => {
           <div className="px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="lg:hidden flex items-center space-x-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <BarChart3 className="h-5 w-5 text-primary-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
+                  <img src={logoImage} alt="Logo" className="h-full w-full object-contain" />
                 </div>
                 <h1 className="text-lg font-bold">管理面板</h1>
               </div>

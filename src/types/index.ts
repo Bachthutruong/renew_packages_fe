@@ -24,6 +24,14 @@ export interface DataWithPercentage {
   totalCount?: number;
 }
 
+export interface GroupedB3Detail {
+  detail: string;
+  count: number;
+  totalCount: number;
+  percentage: number;
+  configuredPercentage?: number;
+}
+
 export interface PhoneBrand {
   _id?: string;
   name: string;

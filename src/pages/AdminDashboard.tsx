@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { dataAPI, phoneBrandsAPI } from '../services/api';
-import { PhoneBrand } from '../types';
+import { PhoneBrand, GroupedB3Detail } from '../types';
 import { useDataSelection } from '../context/DataSelectionContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -37,7 +37,7 @@ const AdminDashboard: React.FC = () => {
   
   // Data states
   const [b1Values, setB1Values] = useState<string[]>([]);
-  const [b3Details, setB3Details] = useState<string[]>([]);
+  const [b3Details, setB3Details] = useState<GroupedB3Detail[]>([]);
   const [phoneBrands, setPhoneBrands] = useState<PhoneBrand[]>([]);
   
   // Navigation states - removed currentStep, using individual states  
@@ -125,12 +125,26 @@ const AdminDashboard: React.FC = () => {
     
     setIsLoadingB3Details(true);
     try {
+      console.log('[AdminDashboard] Loading B3 details for:', { selectedB1, selectedB2, selectedB3 });
       const details = await dataAPI.getB3Details(selectedB1, selectedB2, selectedB3);
-      setB3Details(details);
+      console.log('[AdminDashboard] Received B3 details:', details);
+      
+      // Validate data structure
+      const validatedDetails = Array.isArray(details) ? details.filter(item => {
+        if (!item || typeof item !== 'object') {
+          console.warn('[AdminDashboard] Invalid item found:', item);
+          return false;
+        }
+        return true;
+      }) : [];
+
+      console.log('[AdminDashboard] Validated details count:', validatedDetails.length);
+      setB3Details(validatedDetails);
       setB3DetailsSource('B3');
       setShowB3Details(true);
     } catch (error: any) {
       console.error('Failed to load B3 details:', error);
+      setB3Details([]); // Set empty array on error
     } finally {
       setIsLoadingB3Details(false);
     }
@@ -142,7 +156,7 @@ const AdminDashboard: React.FC = () => {
     setIsLoadingB3Details(true);
     try {
       const b3DataForCombo = await dataAPI.getB3Data(selectedB1, selectedB2);
-      const allDetails: string[] = [];
+      const allDetails: GroupedB3Detail[] = [];
       
       // Process in batches for better performance
       const batchSize = 5;
@@ -162,6 +176,24 @@ const AdminDashboard: React.FC = () => {
       console.error('Failed to load B3 details for B2:', error);
     } finally {
       setIsLoadingB3Details(false);
+    }
+  };
+
+  const handleUpdateB3DetailPercentage = async (detail: string, percentage: number) => {
+    if (!selectedB1 || !selectedB2 || !selectedB3) {
+      toast.error('請確保已選擇完整的 B1, B2, B3');
+      return;
+    }
+    
+    try {
+      await dataAPI.updateB3DetailPercentage(selectedB1, selectedB2, selectedB3, detail, percentage);
+      toast.success('更新成功');
+      
+      // 重新載入 B3 詳細資料
+      await loadB3Details();
+    } catch (error: any) {
+      console.error('Failed to update B3 detail percentage:', error);
+      toast.error('更新失敗');
     }
   };
 
@@ -302,7 +334,7 @@ const AdminDashboard: React.FC = () => {
               <ChevronRight className="h-4 w-4" />
               <span className={currentStep === 'select-b2' ? 'text-foreground font-medium' : 'cursor-pointer hover:text-foreground'} 
                     onClick={() => currentStep === 'select-b3' && goBack()}>
-                選擇 B2
+                續約選手機案比較划算，您要手機案嗎？
               </span>
             </>
           )}
@@ -388,7 +420,7 @@ const AdminDashboard: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold mb-2">步驟 2：選擇 B2</h2>
+          <h2 className="text-2xl font-bold mb-2">步驟 2：續約選手機案比較划算，您要手機案嗎？</h2>
           <p className="text-muted-foreground">選擇一個依據 B1 篩選的 B2 數值：<span className="font-semibold text-foreground">{selectedB1}</span></p>
         </div>
         <Button variant="outline" onClick={goBack} className="gap-2">
@@ -647,7 +679,7 @@ const AdminDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                步驟 1：選您目前的資費
+                選您目前的資費
                 {selectedB1 && <span className="text-green-600">✓ {selectedB1}</span>}
               </CardTitle>
             </div>
@@ -671,12 +703,12 @@ const AdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  步驟 2：選擇 B2
+                  續約選手機案比較划算，您要手機案嗎？
                   {selectedB2 && <span className="text-green-600">✓ {selectedB2}</span>}
                 </CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   基於 {selectedB1} 的選項
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <ChevronRight className={`h-5 w-5 transition-transform ${isB2Expanded ? 'rotate-90' : ''}`} />
             </div>
@@ -699,12 +731,12 @@ const AdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  步驟 3：選擇 B3
+                  選擇 B3
                   {selectedB3 && <span className="text-green-600">✓ {selectedB3}</span>}
                 </CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   基於 {selectedB1} → {selectedB2} 的選項
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <ChevronRight className={`h-5 w-5 transition-transform ${isB3Expanded ? 'rotate-90' : ''}`} />
             </div>
@@ -833,13 +865,154 @@ const AdminDashboard: React.FC = () => {
             {/* 顯示詳細文字資料 (如果有) */}
             {b3Details.length > 0 && (
               <div className="mt-6 pt-6 border-t">
-                <h3 className="text-lg font-semibold mb-3">詳細描述</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {b3Details.map((detail, index) => (
-                    <Card key={index} className="p-3">
-                      <p className="text-sm">{detail}</p>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">詳細描述統計 (管理員模式)</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      共 {b3Details.length} 項資料
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/admin/percentage-config')}>
+                      批量管理
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {b3Details.map((item, index) => {
+                    // Safe access with default values
+                    const safeItem = {
+                      detail: item?.detail || '無詳細資料',
+                      count: item?.count || 0,
+                      totalCount: item?.totalCount || 0,
+                      percentage: typeof item?.percentage === 'number' ? item.percentage : 0,
+                      configuredPercentage: typeof item?.configuredPercentage === 'number' ? item.configuredPercentage : undefined
+                    };
+
+                    return (
+                      <Card key={`admin-detail-${index}`} className="border hover:shadow-md transition-all">
+                        <CardContent className="p-4">
+                          <div className="space-y-4">
+                            {/* 主要內容 */}
+                            <div className="min-h-[40px]">
+                              <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 font-medium">
+                                {safeItem.detail}
+                              </p>
+                            </div>
+                            
+                            {/* 統計資訊 */}
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                                  出現: {safeItem.count}次
+                                </span>
+                                <span>總數: {safeItem.totalCount}</span>
+                              </div>
+                              <div className="text-sm font-semibold text-primary">
+                                自然比例: {safeItem.percentage.toFixed(1)}%
+                              </div>
+                            </div>
+                            
+                            {/* 管理員編輯比例功能 */}
+                            <div className="bg-amber-50 p-3 rounded border border-amber-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-amber-800">管理員設定比例:</span>
+                                <span className="text-xs text-amber-600">
+                                  {safeItem.configuredPercentage !== undefined ? '已設定' : '使用自然比例'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  defaultValue={safeItem.configuredPercentage || safeItem.percentage}
+                                  className="flex-1 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                  onBlur={(e) => {
+                                    const newValue = parseFloat(e.target.value) || 0;
+                                    if (newValue !== (safeItem.configuredPercentage || safeItem.percentage)) {
+                                      handleUpdateB3DetailPercentage(safeItem.detail, newValue);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseFloat((e.target as HTMLInputElement).value) || 0;
+                                      handleUpdateB3DetailPercentage(safeItem.detail, newValue);
+                                    }
+                                  }}
+                                />
+                                <span className="text-xs text-amber-700">%</span>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-xs px-2 py-1 h-auto"
+                                  onClick={() => {
+                                    const input = document.querySelector(`input[defaultValue="${safeItem.configuredPercentage || safeItem.percentage}"]`) as HTMLInputElement;
+                                    if (input) {
+                                      const newValue = parseFloat(input.value) || 0;
+                                      handleUpdateB3DetailPercentage(safeItem.detail, newValue);
+                                    }
+                                  }}
+                                >
+                                  保存
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {/* 進度條對比 */}
+                            <div className="space-y-2">
+                              {/* 自然比例 */}
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                  <span>自然比例</span>
+                                  <span>{safeItem.percentage.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min(Math.max(safeItem.percentage, 0), 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* 設定比例 */}
+                              {safeItem.configuredPercentage !== undefined && (
+                                <div className="space-y-1">
+                                  <div className="flex justify-between items-center text-xs text-amber-700">
+                                    <span>設定比例</span>
+                                    <span>{safeItem.configuredPercentage.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div 
+                                      className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+                                      style={{ width: `${Math.min(Math.max(safeItem.configuredPercentage, 0), 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
                     </Card>
-                  ))}
+                    );
+                  })}
+                </div>
+                
+                {/* 管理員統計摘要 */}
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-medium text-blue-800">管理員統計摘要:</span>
+                      <div className="flex gap-4 text-blue-700">
+                        <span>總項目: {b3Details.length}</span>
+                        <span>總出現次數: {b3Details.reduce((sum, item) => sum + (item?.count || 0), 0)}</span>
+                        <span>已設定比例: {b3Details.filter(item => item?.configuredPercentage !== undefined).length}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      提示: 點擊輸入框修改比例，按 Enter 或點擊保存按鈕確認變更
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
